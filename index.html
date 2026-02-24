@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hydroponic Wheel - High Flow Irrigation</title>
+    <style>
+        body { margin: 0; background-color: #626262; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+        #info { position: absolute; top: 20px; left: 20px; color: #333; pointer-events: none; z-index: 10; }
+        #dashboard {
+            position: absolute; right: 20px; top: 20px; width: 250px;
+            background: rgba(0, 0, 0, 0.15); backdrop-filter: blur(10px);
+            padding: 20px; border-radius: 15px; border: 1px solid rgba(0, 0, 0, 0.1);
+            color: #222; z-index: 100;
+        }
+        .control-group { margin-bottom: 15px; }
+        label { display: block; font-size: 0.75rem; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px; font-weight: bold; }
+        input[type=range] { width: 100%; cursor: pointer; }
+        .btn-group { display: flex; gap: 10px; flex-wrap: wrap; }
+        button {
+            flex: 1; padding: 8px; border: none; border-radius: 5px;
+            cursor: pointer; font-weight: bold; transition: 0.3s;
+        }
+        #sunBtn { background: #ffcc00; color: #333; }
+        #uvBtn { background: #bf00ff; color: #fff; }
+        #waterBtn { background: #0088ff; color: #fff; width: 100%; margin-top: 10px; }
+        button:hover { opacity: 0.8; transform: scale(1.02); }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <h1>Rotary Hydroponic System</h1>
+        <p>Variable Irrigation Flow Control</p>
+    </div>
+
+    <div id="dashboard">
+        <div class="control-group">
+            <label>Rotation Speed</label>
+            <input type="range" id="speedSlider" min="0" max="0.02" step="0.0001" value="0.003">
+        </div>
+        <div class="control-group">
+            <label>Light Brightness</label>
+            <input type="range" id="brightSlider" min="0" max="3000" step="10" value="1500">
+        </div>
+        <div class="control-group">
+            <label>Water Flow Rate</label>
+            <input type="range" id="flowSlider" min="0.1" max="3.0" step="0.1" value="1.0">
+        </div>
+        <div class="control-group">
+            <label>Spectrum</label>
+            <div class="btn-group">
+                <button id="sunBtn">SUN</button>
+                <button id="uvBtn">UV</button>
+            </div>
+            <button id="waterBtn">WATER SYSTEM: OFF</button>
+        </div>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        let rotationSpeed = 0.003;
+        let isWatering = false;
+        let flowMultiplier = 1.0;
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color('#626262');
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(22, 18, 40);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+
+        const ambient = new THREE.AmbientLight(0xffffff, 0.3); 
+        scene.add(ambient);
+        
+        const growLight = new THREE.PointLight(0xffffff, 1500, 60);
+        growLight.position.set(0, 12.5, 0); 
+        growLight.castShadow = true;
+        scene.add(growLight);
+
+        const metalMat = new THREE.MeshStandardMaterial({ color: 0x444444, metalness: 0.9, roughness: 0.2 });
+        const trayMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
+        const leafMat = new THREE.MeshStandardMaterial({ color: 0x4caf50 });
+        const waterMat = new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.6 });
+        const lightTubeMat = new THREE.MeshStandardMaterial({ 
+            color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 2, transparent: true, opacity: 0.9
+        });
+
+        const base = new THREE.Mesh(new THREE.BoxGeometry(20, 1, 35), new THREE.MeshStandardMaterial({color: 0x222222}));
+        base.position.y = -0.5;
+        scene.add(base);
+
+        function createSupport(zPos) {
+            const group = new THREE.Group();
+            const legGeo = new THREE.BoxGeometry(0.8, 14.5, 0.8);
+            const left = new THREE.Mesh(legGeo, metalMat);
+            left.position.set(-4, 6, 0); left.rotation.z = 12.05;
+            const right = new THREE.Mesh(legGeo, metalMat);
+            right.position.set(4, 6, 0); right.rotation.z = -12.05;
+            const hub = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 1.5, 32), metalMat);
+            hub.rotation.x = Math.PI / 2; hub.position.y = 12.5;
+            const beamGeo = new THREE.BoxGeometry(0.5, 10.25, 0.5);
+            const beam = new THREE.Mesh(beamGeo, metalMat);
+            beam.position.set(0, 17, 0); 
+            group.add(left, right, hub, beam);
+            group.position.z = zPos;
+            return group;
+        }
+        scene.add(createSupport(12.5));
+        scene.add(createSupport(-12.5));
+
+        const sprinklerPipe = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 25), metalMat);
+        sprinklerPipe.rotation.x = Math.PI/2;
+        sprinklerPipe.position.set(0, 22, 0);
+        scene.add(sprinklerPipe);
+
+        const wheelSystem = new THREE.Group();
+        wheelSystem.position.y = 12.5;
+        scene.add(wheelSystem);
+
+        const radius = 8;
+        const ringF = new THREE.Mesh(new THREE.TorusGeometry(radius, 0.2, 16, 100), metalMat);
+        ringF.position.z = 11.5;
+        const ringB = ringF.clone(); ringB.position.z = -11.5;
+        wheelSystem.add(ringF, ringB);
+
+        const lightAxle = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 25), lightTubeMat);
+        lightAxle.rotation.x = Math.PI/2;
+        wheelSystem.add(lightAxle);
+
+        for (let i = 0; i < 12; i++) {
+            const angle = (i / 12) * Math.PI * 2;
+            const spokeGeo = new THREE.CylinderGeometry(0.05, 0.05, radius);
+            const spokeF = new THREE.Mesh(spokeGeo, metalMat);
+            spokeF.position.set(Math.cos(angle) * (radius/2), Math.sin(angle) * (radius/2), 11.5);
+            spokeF.rotation.z = angle + Math.PI/2;
+            const spokeB = spokeF.clone(); spokeB.position.z = -11.5;
+            wheelSystem.add(spokeF, spokeB);
+        }
+
+        const trays = [];
+        for (let i = 0; i < 12; i++) {
+            const pivot = new THREE.Group();
+            const angle = (i / 12) * Math.PI * 2;
+            pivot.position.set(Math.cos(angle) * radius, Math.sin(angle) * radius, 0);
+            const tray = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.8, 22), trayMat);
+            tray.position.y = -0.5;
+            pivot.add(tray);
+            for(let j = -10; j <= 10; j += 2.5) {
+                const plant = new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 8), leafMat);
+                plant.position.set(0, 0.4, j);
+                tray.add(plant);
+            }
+            wheelSystem.add(pivot);
+            trays.push(pivot);
+        }
+
+        // --- Water Particles ---
+        const particleCount = 400; // Increased count for better flow effect
+        const particles = new THREE.Group();
+        const dropletGeo = new THREE.SphereGeometry(0.06, 4, 4);
+        for(let i = 0; i < particleCount; i++) {
+            const droplet = new THREE.Mesh(dropletGeo, waterMat.clone());
+            resetDroplet(droplet);
+            // Hide some initially to allow flow scaling
+            droplet.visible = i < (particleCount / 2); 
+            particles.add(droplet);
+        }
+        scene.add(particles);
+
+        function resetDroplet(d) {
+            d.position.set(Math.random() * 1.5 - 0.75, 22, Math.random() * 22 - 11);
+            d.userData.baseSpeed = 0.05 + Math.random() * 0.1;
+        }
+
+        // Dashboard Logic
+        document.getElementById('speedSlider').addEventListener('input', (e) => rotationSpeed = parseFloat(e.target.value));
+        document.getElementById('brightSlider').addEventListener('input', (e) => {
+            growLight.intensity = parseFloat(e.target.value);
+            lightTubeMat.emissiveIntensity = (growLight.intensity / 1500) * 2;
+        });
+        document.getElementById('flowSlider').addEventListener('input', (e) => {
+            flowMultiplier = parseFloat(e.target.value);
+        });
+        
+        document.getElementById('sunBtn').addEventListener('click', () => {
+            growLight.color.setHex(0xffcc00); lightTubeMat.emissive.setHex(0xffcc00); lightTubeMat.color.setHex(0xffcc00);
+        });
+        document.getElementById('uvBtn').addEventListener('click', () => {
+            growLight.color.setHex(0xbf00ff); lightTubeMat.emissive.setHex(0xbf00ff); lightTubeMat.color.setHex(0xbf00ff);
+        });
+
+        const waterBtn = document.getElementById('waterBtn');
+        waterBtn.addEventListener('click', () => {
+            isWatering = !isWatering;
+            waterBtn.textContent = `WATER SYSTEM: ${isWatering ? 'ON' : 'OFF'}`;
+            particles.visible = isWatering;
+        });
+        particles.visible = false;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            wheelSystem.rotation.z += rotationSpeed;
+            trays.forEach(p => p.rotation.z = -wheelSystem.rotation.z);
+
+            if(isWatering) {
+                particles.children.forEach((d, index) => {
+                    // Only show particles based on flow multiplier
+                    const threshold = (index / particleCount) * 3.0;
+                    d.visible = threshold < flowMultiplier;
+
+                    if(d.visible) {
+                        d.position.y -= d.userData.baseSpeed * flowMultiplier;
+                        // Randomize X slightly for "mist" effect at high flow
+                        d.position.x += (Math.random() - 0.5) * 0.01 * flowMultiplier;
+                        
+                        if(d.position.y < 2) resetDroplet(d);
+                    }
+                });
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        animate();
+    </script>
+</body>
+</html>
